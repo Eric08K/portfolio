@@ -1,0 +1,165 @@
+from vpython import *
+#Web VPython 3.2
+
+# 1. Configuração da Cena 3D
+scene = canvas(title="<b>Simulador Cinemático: Decomposição Vetorial (vx e vy)</b>", width=700, height=500, align="left", center=vector(40, 30, 0), background=color.gray(0.9))
+scene.camera.pos = vector(40, 30, 110)
+
+# 2. Configuração dos Gráficos
+g_yt = graph(title="Posição Vertical (y x t)", xtitle="Tempo t (s)", ytitle="Altura y (m)", width=350, height=180, align="right", xmin=0, xmax=12, ymin=-5, ymax=70)
+curva_yt = gcurve(graph=g_yt, color=color.blue, width=2)
+
+g_vx = graph(title="Velocidade Horizontal (vx x t)", xtitle="Tempo t (s)", ytitle="vx (m/s)", width=350, height=180, align="right", xmin=0, xmax=12, ymin=-5, ymax=55)
+curva_vx = gcurve(graph=g_vx, color=color.cyan, width=2)
+
+g_vy = graph(title="Velocidade Vertical (vy x t)", xtitle="Tempo t (s)", ytitle="vy (m/s)", width=350, height=180, align="right", xmin=0, xmax=12, ymin=-75, ymax=55)
+curva_vy = gcurve(graph=g_vy, color=color.orange, width=2)
+
+# 3. Parâmetros Físicos
+g_val = -10
+g = vector(0, g_val, 0)
+dt = 0.01
+
+# 4. Objetos do Cenário
+chao = box(pos=vector(40, -1, 0), size=vector(250, 2, 20), color=vector(0.2, 0.6, 0.2))
+projetil = sphere(pos=vector(0, 0, 0), radius=1.5, color=color.purple, make_trail=True, trail_type="points", interval=10)
+
+# Vetores
+seta_vx = arrow(pos=projetil.pos, axis=vector(0,0,0), color=color.cyan, shaftwidth=0.9, headwidth=2.2, visible=True)
+seta_vy = arrow(pos=projetil.pos, axis=vector(0,0,0), color=color.orange, shaftwidth=0.9, headwidth=2.2, visible=True)
+seta_v = arrow(pos=projetil.pos, axis=vector(0,0,0), color=color.red, shaftwidth=0.9, headwidth=2.2, visible=False)
+
+# Réguas do cenário
+eixo_x = arrow(pos=vector(0,0,0), axis=vector(180,0,0), color=color.black, shaftwidth=0.2)
+eixo_y = arrow(pos=vector(0,0,0), axis=vector(0,150,0), color=color.black, shaftwidth=0.2)
+label(pos=vector(185, 0, 0), text="x (m)", box=False, line=False, color=color.black)
+label(pos=vector(0, 155, 0), text="y (m)", box=False, line=False, color=color.black)
+
+for x_tick in range(20, 161, 20):
+    box(pos=vector(x_tick, 0, 0), size=vector(0.2, 2, 2), color=color.black)
+    label(pos=vector(x_tick, -3, 0), text=str(x_tick), box=False, line=False, color=color.black, height=10)
+
+for y_tick in range(20, 141, 20):
+    box(pos=vector(0, y_tick, 0), size=vector(2, 0.2, 2), color=color.black)
+    label(pos=vector(-4, y_tick, 0), text=str(y_tick), box=False, line=False, color=color.black, height=10)
+
+# 5. Variáveis de Controle
+lancando = False
+v = vector(0,0,0)
+t = 0
+
+# === INTERFACE DE USUÁRIO (UI) ===
+scene.append_to_caption('\n<b>Parâmetros Iniciais</b>\n')
+
+def atualiza_y0(s):
+    texto_y0.text = f" {s.value} m"
+    
+    # Adicione esta linha para somar a altura inicial ao limite de 70
+    g_yt.ymax = 70 + s.value 
+    
+    if not lancando:
+        projetil.pos.y = s.value
+        seta_vx.pos = projetil.pos
+        seta_vy.pos = projetil.pos
+        seta_v.pos = projetil.pos
+
+scene.append_to_caption('Altura Inicial (y₀): ')
+sl_y0 = slider(min=0, max=80, value=0, step=1, length=200, bind=atualiza_y0)
+texto_y0 = wtext(text=" 0 m")
+scene.append_to_caption('\n')
+
+def atualiza_v0(s):
+    texto_v0.text = f" {s.value} m/s"
+
+scene.append_to_caption('Velocidade (v₀): ')
+sl_v0 = slider(min=10, max=50, value=40, step=1, length=200, bind=atualiza_v0)
+texto_v0 = wtext(text=" 40 m/s")
+scene.append_to_caption('\n')
+
+def atualiza_angulo(s):
+    texto_angulo.text = f" {s.value} graus"
+
+scene.append_to_caption('Ângulo (θ): ')
+sl_angulo = slider(min=0, max=90, value=60, step=1, length=200, bind=atualiza_angulo)
+texto_angulo = wtext(text=" 60 graus")
+scene.append_to_caption('\n\n')
+
+scene.append_to_caption('<b>Modo dos Vetores: </b>')
+def seleciona_modo_vetor(m):
+    modo = m.selected
+    if modo == "Componentes separadas (vx, vy)":
+        seta_vx.visible = True
+        seta_vy.visible = True
+        seta_v.visible = False
+    elif modo == "Vetor Resultante (v)":
+        seta_vx.visible = False
+        seta_vy.visible = False
+        seta_v.visible = True
+    elif modo == "Resultante e Separadas":
+        seta_vx.visible = True
+        seta_vy.visible = True
+        seta_v.visible = True
+
+menu_vetores = menu(choices=["Componentes separadas (vx, vy)", "Vetor Resultante (v)", "Resultante e Separadas"], bind=seleciona_modo_vetor)
+
+scene.append_to_caption('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;')
+
+def toggle_camera(c):
+    pass 
+
+cam_dinamica = checkbox(text='<b> Câmera Dinâmica (Follow & Zoom)</b>', bind=toggle_camera, checked=False)
+scene.append_to_caption('\n\n')
+
+def disparar(b):
+    global lancando, t, v
+    if lancando: return
+    
+    projetil.pos = vector(0, sl_y0.value, 0)
+    projetil.clear_trail()
+    curva_yt.data = []
+    curva_vx.data = []
+    curva_vy.data = []
+    t = 0
+    
+    v0_mag = sl_v0.value
+    theta = radians(sl_angulo.value)
+    
+    v = vector(v0_mag * cos(theta), v0_mag * sin(theta), 0)
+    lancando = True
+
+button(text="<b>▶ Iniciar Lançamento</b>", bind=disparar, color=color.white, background=color.blue)
+scene.append_to_caption('\n\n<i>Note: O gráfico de posição vertical ajusta sua escala automaticamente, enquanto os gráficos de velocidade possuem escalas travadas para visualização precisa da aceleração.</i>')
+
+# 6. Loop de Física
+while True:
+    rate(100)
+    
+    if cam_dinamica.checked:
+        scene.center = projetil.pos
+        scene.range = 55
+    else:
+        scene.center = vector(40, 30, 0)
+        scene.range = 95 
+    
+    if lancando:
+        v = v + g * dt
+        projetil.pos = projetil.pos + v * dt
+        t = t + dt
+        
+        seta_vx.pos = projetil.pos
+        seta_vy.pos = projetil.pos
+        seta_v.pos = projetil.pos
+        
+        seta_vx.axis = vector(v.x * 0.4, 0, 0)
+        seta_vy.axis = vector(0, v.y * 0.4, 0)
+        seta_v.axis = vector(v.x * 0.4, v.y * 0.4, 0)
+        
+        curva_yt.plot(t, projetil.pos.y)
+        curva_vx.plot(t, v.x)
+        curva_vy.plot(t, v.y)
+        
+        if projetil.pos.y < 0:
+            lancando = False
+            projetil.pos.y = 0
+            seta_vy.axis = vector(0,0,0)
+            seta_v.axis = vector(v.x * 0.4, 0, 0)
