@@ -1,0 +1,440 @@
+from vpython import *
+#Web VPython 3.2
+# 1. Configuração da Cena 3D
+scene = canvas(
+    title="<b>Simulador Cinemático: Movimento Relativo e Inércia</b>",
+    width=700,
+    height=500,
+    align="left",
+    background=color.cyan
+)
+scene.center = vector(0, 10, 0)
+scene.range = 100
+
+# 2. Configuração Opcional do Gráfico
+# O gráfico começa desligado e pode ser ativado pelo menu.
+g_posicao = None
+curva_x_trem = None
+curva_x_pessoa = None
+historico = []
+
+
+def criar_grafico():
+    """Cria o gráfico e plota os pontos acumulados até o momento."""
+    global g_posicao, curva_x_trem, curva_x_pessoa
+
+    if g_posicao is not None:
+        return
+
+    g_posicao = graph(
+        title="Posição no Solo (x x t)",
+        xtitle="Tempo t (s)",
+        ytitle="Posição x (m)",
+        width=400,
+        height=300,
+        align="right",
+        xmin=0,
+        xmax=15,
+        ymin=-200,
+        ymax=250
+    )
+
+    curva_x_trem = gcurve(
+        graph=g_posicao,
+        color=color.blue,
+        width=3,
+        label="Trem"
+    )
+    curva_x_pessoa = gcurve(
+        graph=g_posicao,
+        color=color.red,
+        width=3,
+        label="Pessoa"
+    )
+
+    for ponto in historico:
+        curva_x_trem.plot(ponto[0], ponto[1])
+        curva_x_pessoa.plot(ponto[0], ponto[2])
+
+
+def remover_grafico():
+    """Remove o gráfico da cena sem apagar o histórico da simulação."""
+    global g_posicao, curva_x_trem, curva_x_pessoa
+
+    if g_posicao is not None:
+        g_posicao.delete()
+
+    g_posicao = None
+    curva_x_trem = None
+    curva_x_pessoa = None
+
+
+# 3. Objetos do Cenário (Fixos no Solo)
+chao = box(
+    pos=vector(0, -2, 0),
+    size=vector(500, 2, 20),
+    color=vector(0.3, 0.7, 0.3)
+)
+trilho = box(
+    pos=vector(0, -0.9, 0),
+    size=vector(500, 0.2, 4),
+    color=color.gray(0.5)
+)
+
+postes = []
+for x in range(-200, 201, 30):
+    postes.append(
+        box(
+            pos=vector(x, 5, -10),
+            size=vector(0.5, 14, 0.5),
+            color=color.orange
+        )
+    )
+
+# 4. Entidades Móveis
+trem = box(
+    pos=vector(-80, 2, 0),
+    size=vector(140, 6, 8),
+    color=color.blue,
+    opacity=0.8
+)
+pessoa = sphere(pos=vector(-80, 6, 0), radius=1.5, color=color.red)
+
+# Vetores de Velocidade
+seta_vtrem = arrow(
+    pos=trem.pos,
+    axis=vector(0, 0, 0),
+    color=color.black,
+    shaftwidth=0.6,
+    headwidth=1.5
+)
+seta_vpessoa = arrow(
+    pos=pessoa.pos,
+    axis=vector(0, 0, 0),
+    color=color.red,
+    shaftwidth=0.6,
+    headwidth=1.5
+)
+
+# 5. Variáveis de Física e Estado
+rodando = False
+dt = 0.02
+t = 0
+v_trem = 20
+v_pessoa_relativa = -20
+x_inicial = -80
+
+caiu = False
+# Velocidade horizontal da pessoa em relação ao solo no instante da saída.
+# Depois da saída, essa velocidade fica constante (solo sem atrito).
+v_pessoa_solo_constante = 0
+v_pessoa_relativa_saida = 0
+
+# 6. Interface de Usuário (UI)
+scene.append_to_caption('\n<b>Painel de Controle</b>\n\n')
+
+
+def altera_vpessoa(s):
+    global v_pessoa_relativa
+    v_pessoa_relativa = s.value
+    texto_vp.text = f" {v_pessoa_relativa} m/s"
+    if caiu:
+        velocidade_solo = v_pessoa_solo_constante
+    else:
+        velocidade_solo = v_trem + v_pessoa_relativa
+    texto_vp_solo.text = f" {round(velocidade_solo, 1)} m/s"
+
+
+scene.append_to_caption(
+    '<b>Velocidade da pessoa em relação ao trem (ajustada no slider):</b> '
+)
+sl_vp = slider(
+    min=-50,
+    max=50,
+    value=-20,
+    step=1,
+    length=250,
+    bind=altera_vpessoa
+)
+texto_vp = wtext(text=" -20 m/s")
+scene.append_to_caption(
+    '<br><b>Velocidade da pessoa em relação ao solo (resultado):</b> '
+)
+texto_vp_solo = wtext(text=" 0 m/s")
+scene.append_to_caption(
+    '<br><span style="color:#475569; font-size:12px;">'
+    'V pessoa/solo = V trem + V pessoa/trem. Após a saída, '
+    'V pessoa/solo é conservada por inércia (sem atrito).</span>\n\n'
+)
+
+modo_referencial = "Observador no Solo (Externo)"
+
+
+def altera_referencial(m):
+    global modo_referencial
+    modo_referencial = m.selected
+
+
+scene.append_to_caption('<b>Referencial de Observação: </b>')
+menu(
+    choices=[
+        "Observador no Solo (Externo)",
+        "Observador no Trem (Interno)"
+    ],
+    bind=altera_referencial
+)
+scene.append_to_caption('\n\n')
+
+
+def altera_visualizacao(m):
+    if m.selected == "Movimento + Gráfico":
+        criar_grafico()
+    else:
+        remover_grafico()
+
+
+scene.append_to_caption('<b>Visualização: </b>')
+menu(
+    choices=["Somente Movimento", "Movimento + Gráfico"],
+    selected="Somente Movimento",
+    bind=altera_visualizacao
+)
+scene.append_to_caption('\n\n')
+
+problem_statement_visivel = False
+texto_problem_statement = wtext(text="")
+
+PROBLEM_STATEMENT = (
+    '<div style="display:block; box-sizing:border-box; max-width:680px; '
+    'margin:10px 0 14px 0; overflow:hidden; border:1px solid #dbeafe; '
+    'border-radius:12px; background:#ffffff; '
+    'box-shadow:0 5px 18px rgba(15,23,42,0.12); '
+    'font-family:Arial,Helvetica,sans-serif; color:#1e293b;">'
+    '<div style="padding:16px 20px; '
+    'background:linear-gradient(120deg,#123b68,#2563eb); color:white;">'
+    '<div style="font-size:10px; font-weight:700; letter-spacing:1.6px; '
+    'text-transform:uppercase; opacity:0.82;">DESAFIO DE CINEMÁTICA</div>'
+    '<div style="margin-top:5px; font-size:20px; font-weight:700;">'
+    'Movimento relativo e inércia</div>'
+    '<div style="margin-top:5px; font-size:12px; opacity:0.9;">'
+    'Referenciais · velocidade constante · ausência de atrito</div>'
+    '</div>'
+    '<div style="padding:17px 20px 19px 20px; line-height:1.55;">'
+    '<div style="margin-bottom:7px; color:#1d4ed8; font-size:11px; '
+    'font-weight:700; letter-spacing:1px; text-transform:uppercase;">'
+    'Situação-problema</div>'
+    '<div style="font-size:13px;">'
+    'Um trem desloca-se em linha reta com velocidade constante. Uma pessoa '
+    'caminha sobre o trem com velocidade definida em relação a ele. '
+    'Observe o movimento da pessoa em relação ao solo enquanto ela está '
+    'no trem e depois que sai dele.</div>'
+    '<div style="margin:14px 0 7px 0; color:#1d4ed8; font-size:11px; '
+    'font-weight:700; letter-spacing:1px; text-transform:uppercase;">'
+    'Relação entre as velocidades</div>'
+    '<div style="padding:11px 14px; border:1px solid #bfdbfe; '
+    'border-radius:8px; background:#eff6ff; color:#1e3a8a; '
+    'text-align:center; font-size:16px; font-weight:700;">'
+    'v<sub>pessoa, solo</sub> = v<sub>trem</sub> + v<sub>relativa</sub>'
+    '</div>'
+    '<div style="margin-top:14px; padding:11px 13px; '
+    'border-left:3px solid #0f766e; border-radius:4px; '
+    'background:#f0fdfa; font-size:12px;">'
+    '<b style="color:#0f766e;">Após sair do trem:</b> '
+    'considera-se o chão horizontal e sem atrito. Assim, a pessoa mantém '
+    'a velocidade horizontal que tinha em relação ao solo no instante '
+    'da saída. O gráfico opcional mostra as posições do trem e da pessoa '
+    'ao longo do tempo.</div>'
+    '</div></div>'
+)
+
+
+def alterna_problem_statement(b):
+    global problem_statement_visivel
+    problem_statement_visivel = not problem_statement_visivel
+
+    if problem_statement_visivel:
+        texto_problem_statement.text = PROBLEM_STATEMENT
+        b.text = "Ocultar Problem Statement"
+    else:
+        texto_problem_statement.text = ""
+        b.text = "Mostrar Problem Statement"
+
+
+button(text="Mostrar Problem Statement", bind=alterna_problem_statement)
+scene.append_to_caption('\n\n')
+
+
+def play_pause(b):
+    global rodando
+    rodando = not rodando
+    b.text = "<b>⏸ Pausar</b>" if rodando else "<b>▶ Iniciar</b>"
+
+
+def resetar(b):
+    global rodando, caiu, v_pessoa_solo_constante
+    global v_pessoa_relativa_saida, t
+    rodando = False
+    caiu = False
+    v_pessoa_solo_constante = 0
+    v_pessoa_relativa_saida = 0
+    t = 0
+    historico.clear()
+    texto_vp_solo.text = f" {round(v_trem + v_pessoa_relativa, 1)} m/s"
+
+    if g_posicao is not None:
+        curva_x_trem.data = []
+        curva_x_pessoa.data = []
+
+    btn_play.text = "<b>▶ Iniciar</b>"
+    trem.pos.x = x_inicial
+    pessoa.pos.x = x_inicial
+    pessoa.pos.y = 6
+    scene.center = vector(0, 10, 0)
+
+
+btn_play = button(
+    text="<b>▶ Iniciar</b>",
+    bind=play_pause,
+    color=color.white,
+    background=color.blue
+)
+scene.append_to_caption('  ')
+button(
+    text="<b>⟲ Resetar</b>",
+    bind=resetar,
+    color=color.black,
+    background=color.orange
+)
+
+label_ref = label(
+    pos=vector(0, 38, 0),
+    text="",
+    box=False,
+    color=color.black,
+    height=18,
+    font="sans"
+)
+
+# 7. Loop Principal
+while True:
+    rate(60)
+
+    # Velocidade da pessoa em relação ao solo enquanto está no trem.
+    # Esta velocidade é capturada no instante em que ela sai do trem.
+    v_pessoa_solo = v_trem + v_pessoa_relativa
+
+    if rodando:
+        t += dt
+        trem.pos.x += v_trem * dt
+
+        if not caiu:
+            # Calcula o próximo passo e verifica se a pessoa ultrapassa
+            # uma das extremidades do trem (comprimento total = 140 m).
+            proxima_x_pessoa = pessoa.pos.x + v_pessoa_solo * dt
+            separacao_prevista = proxima_x_pessoa - trem.pos.x
+
+            pessoa.pos.x = proxima_x_pessoa
+
+            if abs(separacao_prevista) <= 70:
+                pessoa.pos.y = 6
+            else:
+                # Captura a velocidade no solo no instante da saída.
+                # Depois da queda, ela não é recalculada nem desacelerada:
+                # o chão sem atrito mantém esta velocidade constante.
+                caiu = True
+                v_pessoa_solo_constante = v_pessoa_relativa
+                v_pessoa_relativa_saida = v_pessoa_relativa
+                pessoa.pos.y = -0.5
+        else:
+            # Chão sem atrito: velocidade horizontal constante.
+            pessoa.pos.x += v_pessoa_solo_constante * dt
+            pessoa.pos.y = -0.5
+
+        # Registra a história mesmo quando o gráfico não está sendo exibido.
+        historico.append((t, trem.pos.x, pessoa.pos.x))
+
+        if g_posicao is not None:
+            curva_x_trem.plot(t, trem.pos.x)
+            curva_x_pessoa.plot(t, pessoa.pos.x)
+
+    # 8. Câmera e Vetores
+    if modo_referencial == "Observador no Solo (Externo)":
+        # Depois da saída, acompanha a pessoa para que seu movimento
+        # continue visível mesmo quando ela se afasta do trem.
+        if caiu:
+            scene.center = pessoa.pos + vector(0, 10, 0)
+        else:
+            scene.center = vector(0, 10, 0)
+
+        scene.range = 100
+        label_ref.pos = scene.center + vector(0, 28, 0)
+
+        seta_vtrem.pos = trem.pos + vector(0, 4, 0)
+        seta_vtrem.axis = vector(v_trem * 0.4, 0, 0)
+        seta_vtrem.visible = True
+
+        seta_vpessoa.pos = pessoa.pos + vector(0, 2.5, 0)
+
+        if caiu:
+            velocidade_mostrada = v_pessoa_solo_constante
+            seta_vpessoa.axis = vector(velocidade_mostrada * 0.4, 0, 0)
+            status_pessoa = (
+                "APÓS A QUEDA — SEM ATRITO\n"
+                "V pessoa/trem no instante da saída = "
+                + str(round(v_pessoa_relativa_saida, 1))
+                + " m/s\nV pessoa/solo conservada por inércia = "
+                + str(round(velocidade_mostrada, 1))
+                + " m/s"
+            )
+        else:
+            velocidade_mostrada = v_pessoa_solo
+            seta_vpessoa.axis = vector(velocidade_mostrada * 0.4, 0, 0)
+            status_pessoa = (
+                "V pessoa/trem (ajuste do slider) = "
+                + str(round(v_pessoa_relativa, 1))
+                + " m/s\nV pessoa/solo (soma das velocidades) = "
+                + str(round(velocidade_mostrada, 1))
+                + " m/s"
+            )
+
+        label_ref.text = (
+            "REFERENCIAL: SOLO\nVelocidade do Trem: "
+            + str(v_trem)
+            + " m/s\n"
+            + status_pessoa
+        )
+
+    elif modo_referencial == "Observador no Trem (Interno)":
+        scene.center = trem.pos + vector(0, 10, 0)
+        scene.range = 70
+        label_ref.pos = trem.pos + vector(0, 30, 0)
+
+        seta_vtrem.visible = False
+        seta_vpessoa.pos = pessoa.pos + vector(0, 2.5, 0)
+
+        if caiu:
+            v_relativa_chao = v_pessoa_solo_constante - v_trem
+            seta_vpessoa.axis = vector(v_relativa_chao * 0.4, 0, 0)
+            status_pessoa = (
+                "APÓS A QUEDA — SEM ATRITO\n"
+                "V pessoa/solo conservada por inércia = "
+                + str(round(v_pessoa_solo_constante, 1))
+                + " m/s\nV pessoa/trem (relativa ao trem) = "
+                + str(round(v_relativa_chao, 1))
+                + " m/s"
+            )
+        else:
+            seta_vpessoa.axis = vector(v_pessoa_relativa * 0.4, 0, 0)
+            status_pessoa = (
+                "V pessoa/trem (ajuste do slider) = "
+                + str(v_pessoa_relativa)
+                + " m/s\nV pessoa/solo (soma das velocidades) = "
+                + str(round(v_pessoa_solo, 1))
+                + " m/s"
+            )
+
+        label_ref.text = (
+            "REFERENCIAL: TREM\nVelocidade do Trem: 0 m/s "
+            "(em repouso relativo)\n"
+            + status_pessoa
+        )
